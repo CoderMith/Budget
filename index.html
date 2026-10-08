@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Budget Tracker</title><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png"><meta name="theme-color" content="#3a5bd9"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#eef1f6;--card:#fff;--tx:#14213d;--mu:#667085;--bd:#dde3ee;--ac:#3a5bd9;--in:#1f9d6b;--out:#e0533d}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1320;--card:#161d2e;--tx:#e8ecf5;--mu:#98a2b8;--bd:#263048;--ac:#7c97ff;--in:#3ddc97;--out:#ff7a66}}
+:root[data-theme="dark"]{--bg:#0e1320;--card:#161d2e;--tx:#e8ecf5;--mu:#98a2b8;--bd:#263048;--ac:#7c97ff;--in:#3ddc97;--out:#ff7a66}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:Manrope,system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.45}
+main{max-width:920px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;font-weight:800;margin:0}
+h2{font-size:1rem;font-weight:800;margin:0 0 10px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.big{font-size:1.6rem;font-weight:800}
+.mu{color:var(--mu);font-size:.82rem}
+.in{color:var(--in)}.out{color:var(--out)}
+input,select,button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:9px;padding:9px 10px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:800;cursor:pointer}
+button.x{background:none;border:none;color:var(--mu);cursor:pointer;font-size:1.1rem;padding:4px 8px}
+.bar{height:12px;background:var(--bd);border-radius:6px;overflow:hidden;margin:6px 0 4px}
+.bar>i{display:block;height:100%;background:var(--ac);border-radius:6px;transition:width .4s}
+.bar.g>i{background:var(--in)}.bar.r>i{background:var(--out)}
+.form{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+.seg{display:flex;border:1px solid var(--bd);border-radius:9px;overflow:hidden}
+.seg button{flex:1;border:none;border-radius:0;cursor:pointer;background:var(--bg)}
+.seg button.on.i{background:var(--in);color:#fff}.seg button.on.o{background:var(--out);color:#fff}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--bd)}
+.row:first-child{border-top:none}
+.tag{font-size:.75rem;background:var(--bg);border:1px solid var(--bd);border-radius:20px;padding:1px 8px;margin-right:4px}
+.scroll{overflow-x:auto}
+</style></head>
+<body><main>
+<div class="top"><h1>Budget Tracker</h1><input type="month" id="month" aria-label="Month"></div>
+
+<div class="grid" id="sum"></div>
+
+<div class="card" style="margin-top:14px"><h2>Savings goals</h2>
+ <div class="grid" id="goals"></div></div>
+
+<div class="card"><h2>New transaction</h2>
+ <div class="form">
+  <div class="seg"><button class="i on" id="bi" onclick="setType('in')">Credit</button><button class="o" id="bo" onclick="setType('out')">Debit</button></div>
+  <input type="number" id="amt" placeholder="Amount" min="0" step="0.01" inputmode="decimal">
+  <select id="acc"></select>
+  <select id="cat"></select>
+  <input type="date" id="date">
+  <input id="note" placeholder="Where / note">
+  <button class="p" onclick="add()">Save transaction</button>
+ </div></div>
+
+<div class="card"><h2>Account balances</h2><div class="grid" id="accs"></div></div>
+
+<div class="card"><h2>Debits by category</h2><div id="cats"></div></div>
+
+<div class="card"><div class="top" style="margin:0 0 6px"><h2 style="margin:0">Entries</h2>
+ <select id="fa" onchange="render()"></select></div><div id="list"></div></div>
+</main>
+<script>
+const ACC=['Cash','Online','Card','Bank'],CAT=['Food','Transport','Shopping','Bills','Rent','Health','Fun','Education','Savings','Salary','Other'];
+let S={tx:[],g:{m:0,w:0}},type='in';
+try{const r=JSON.parse(localStorage.getItem('bt3')||'null');if(r)S=r}catch(e){}
+const save=()=>{try{localStorage.setItem('bt3',JSON.stringify(S))}catch(e){}};
+const $=id=>document.getElementById(id);
+const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const ds=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sum=(l,t)=>l.filter(x=>x.type===t).reduce((a,x)=>a+x.amt,0);
+const net=l=>sum(l,'in')-sum(l,'out');
+const opts=(a,all)=>(all?'<option value="">'+all+'</option>':'')+a.map(x=>`<option>${x}</option>`).join('');
+function setType(t){type=t;$('bi').className='i'+(t==='in'?' on':'');$('bo').className='o'+(t==='out'?' on':'')}
+function add(){
+ const amt=parseFloat($('amt').value);
+ if(!(amt>0)){$('amt').focus();return}
+ S.tx.push({id:Date.now(),type,amt,acc:$('acc').value,cat:$('cat').value,date:$('date').value||ds(new Date()),note:$('note').value.trim()});
+ $('amt').value='';$('note').value='';save();render();
+}
+function del(id){S.tx=S.tx.filter(x=>x.id!==id);save();render()}
+function goal(k,v){S.g[k]=Math.max(0,parseFloat(v)||0);save();render()}
+function goalCard(name,target,saved,k,span){
+ const p=target>0?Math.min(100,Math.max(0,saved/target*100)):0;
+ return `<div><div class="mu">${name} (${span})</div>
+ <label class="mu">Target ₹ <input type="number" min="0" value="${target||''}" onchange="goal('${k}',this.value)" style="width:110px" placeholder="Set goal"></label>
+ <div class="bar g"><i style="width:${p}%"></i></div>
+ <div><b class="${saved>=0?'in':'out'}">${fmt(saved)}</b> saved${target>0?' of '+fmt(target)+' · '+(saved>=target?'goal reached':fmt(target-saved)+' to go'):''}</div></div>`;
+}
+function render(){
+ const m=$('month').value,fa=$('fa').value;
+ const L=S.tx.filter(t=>t.date.slice(0,7)===m);
+ const inc=sum(L,'in'),exp=sum(L,'out');
+ $('sum').innerHTML=`<div class="card"><div class="mu">Credit</div><div class="big in">${fmt(inc)}</div></div>
+ <div class="card"><div class="mu">Debit</div><div class="big out">${fmt(exp)}</div><div class="mu">${inc>0?Math.round(exp/inc*100)+'% of income':''}</div></div>
+ <div class="card"><div class="mu">Closing balance</div><div class="big">${fmt(inc-exp)}</div></div>`;
+ const now=new Date(),cm=ds(now).slice(0,7),wd=(now.getDay()+6)%7;
+ const ws=ds(new Date(now.getFullYear(),now.getMonth(),now.getDate()-wd)),we=ds(new Date(now.getFullYear(),now.getMonth(),now.getDate()-wd+6));
+ const cmL=S.tx.filter(t=>t.date.slice(0,7)===cm),wL=S.tx.filter(t=>t.date>=ws&&t.date<=we);
+ $('goals').innerHTML=goalCard('Monthly goal',S.g.m,net(cmL),'m','this month')+goalCard('Weekly goal',S.g.w,net(wL),'w','Mon–Sun');
+ $('accs').innerHTML=ACC.map(a=>{
+  const all=S.tx.filter(t=>t.acc===a),ml=L.filter(t=>t.acc===a),b=net(all);
+  return `<div><div class="mu">${a}</div><div class="big ${b<0?'out':''}" style="font-size:1.25rem">${fmt(b)}</div>
+  <div class="mu">This month: <span class="in">Cr +${fmt(sum(ml,'in'))}</span> <span class="out">Dr −${fmt(sum(ml,'out'))}</span></div></div>`}).join('');
+ const by={};L.filter(t=>t.type==='out').forEach(t=>by[t.cat]=(by[t.cat]||0)+t.amt);
+ const ce=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+ $('cats').innerHTML=ce.length?ce.map(([c,v])=>`<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>${c}</span><b>${fmt(v)} <span class="mu">${Math.round(v/exp*100)}%</span></b></div><div class="bar r"><i style="width:${v/ce[0][1]*100}%"></i></div></div>`).join(''):'<div class="mu">No spending yet this month. Add a Debit entry above.</div>';
+ const LL=L.filter(t=>!fa||t.acc===fa).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+ $('list').innerHTML=LL.length?`<div class="scroll">`+LL.map(t=>`<div class="row"><div><b>${esc(t.note)||t.cat}</b><div class="mu"><span class="tag">${t.acc}</span><span class="tag">${t.cat}</span>${t.date}</div></div>
+  <div style="white-space:nowrap"><b class="${t.type==='in'?'in':'out'}">${t.type==='in'?'+':'−'}${fmt(t.amt)}</b><button class="x" aria-label="Delete transaction" onclick="del(${t.id})">✕</button></div></div>`).join('')+`</div>`:'<div class="mu">No transactions for this month.</div>';
+}
+$('acc').innerHTML=opts(ACC);$('cat').innerHTML=opts(CAT);$('fa').innerHTML=opts(ACC,'All accounts');
+$('date').value=ds(new Date());$('month').value=ds(new Date()).slice(0,7);
+$('month').onchange=render;render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
